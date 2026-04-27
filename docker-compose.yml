@@ -1,0 +1,167 @@
+services:
+  deps:
+    image: node:22-alpine
+    container_name: my-miro-deps
+    working_dir: /workspace
+    command: sh -c "npm ci"
+    volumes:
+      - .:/workspace
+      - root_node_modules:/workspace/node_modules
+
+  migrate:
+    image: node:22-alpine
+    container_name: my-miro-migrate
+    working_dir: /workspace
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/my_miro
+    command: sh -c "npm run prisma:generate && npx prisma db push"
+    volumes:
+      - .:/workspace
+      - root_node_modules:/workspace/node_modules
+
+  db:
+    image: postgres:16-alpine
+    container_name: my-miro-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: my_miro
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d my_miro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: my-miro-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: node:22-alpine
+    container_name: my-miro-api
+    restart: unless-stopped
+    working_dir: /workspace
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/my_miro
+      REDIS_URL: redis://redis:6379
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-3002}
+      NEXT_PUBLIC_REALTIME_URL: ws://localhost:1234
+      AUTH_SECRET: replace_me
+      JWT_SECRET: ${JWT_SECRET:-replace_me}
+      PORT: ${API_PORT:-3002}
+    command: sh -c "npm run dev:api"
+    ports:
+      - "${API_PORT:-3002}:${API_PORT:-3002}"
+    volumes:
+      - .:/workspace
+      - root_node_modules:/workspace/node_modules
+
+  realtime:
+    image: node:22-alpine
+    container_name: my-miro-realtime
+    restart: unless-stopped
+    working_dir: /workspace
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/my_miro
+      REDIS_URL: redis://redis:6379
+      PORT: 1234
+    command: sh -c "npm run dev:realtime"
+    ports:
+      - "1234:1234"
+    volumes:
+      - .:/workspace
+      - root_node_modules:/workspace/node_modules
+
+  worker:
+    image: node:22-alpine
+    container_name: my-miro-worker
+    restart: unless-stopped
+    working_dir: /workspace
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/my_miro
+      REDIS_URL: redis://redis:6379
+      WORKER_INTERVAL_MS: 30000
+    command: sh -c "npm run dev:worker"
+    volumes:
+      - .:/workspace
+      - root_node_modules:/workspace/node_modules
+
+  web:
+    image: node:22-alpine
+    container_name: my-miro-web
+    restart: unless-stopped
+    working_dir: /workspace
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+      realtime:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/my_miro
+      REDIS_URL: redis://redis:6379
+      AUTH_SECRET: replace_me
+      API_BASE_URL: http://api:${API_PORT:-3002}
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-3002}
+      NEXT_PUBLIC_REALTIME_URL: ws://localhost:1234
+    command: sh -c "npm run dev:web"
+    ports:
+      - "${WEB_PORT:-3003}:3000"
+    volumes:
+      - .:/workspace
+      - root_node_modules:/workspace/node_modules
+
+volumes:
+  postgres_data:
+  redis_data:
+  root_node_modules:
