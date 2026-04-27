@@ -138,3 +138,104 @@ Production-grade collaborative whiteboard app (Miro-like) built for web.
 3. Build API endpoints for board CRUD + role enforcement.
 4. Create web shell: login, workspace switcher, board list, open board page.
 5. Stand up realtime service skeleton and connect a board room.
+
+## Current implementation status (April 14, 2026)
+
+- Monorepo scaffolding complete with:
+  - `apps/web` (Next.js app router shell)
+  - `apps/api` (NestJS API baseline)
+  - `apps/realtime` (Hocuspocus + Yjs server skeleton)
+  - `apps/worker` (background worker skeleton)
+  - `packages/contracts`, `packages/auth`, `packages/config`
+- Prisma schema created for:
+  - `users`, `workspaces`, `workspace_members`
+  - `boards`, `board_members`, `board_assets`, `board_versions`
+- API endpoints implemented:
+  - `GET /health`
+  - `POST /auth/register`
+  - `POST /auth/login`
+  - `GET /auth/me`
+  - `GET /workspaces`
+  - `POST /workspaces`
+  - `GET /workspaces/:workspaceId/boards`
+  - `POST /workspaces/:workspaceId/boards`
+  - `GET /boards/:boardId`
+- Web shell implemented:
+  - Workspace list + create flow on `/`
+  - Board list + create flow on `/workspaces/:workspaceId`
+  - Board page shell on `/workspaces/:workspaceId/boards/:boardId`
+- Realtime implemented:
+  - Hocuspocus server with one Yjs document per board room
+  - In-memory persistence abstraction (`apps/realtime/src/persistence.ts`) ready to swap with durable storage
+
+## Authentication and Authorization (Current)
+
+- Auth method: email/password with JWT access token.
+- Session handling in web: HTTP-only cookie set by `/api/auth/login` and `/api/auth/register`.
+- Protected API routes require `Authorization: Bearer <token>`.
+- Workspace/board authorization:
+  - workspace listing and board listing require workspace membership
+  - board creation requires workspace role `OWNER` or `ADMIN`
+
+## Local setup
+
+1. Install dependencies:
+   - `npm install`
+2. Copy env file and adjust values:
+   - `cp .env.example .env`
+3. Start local infrastructure and app services in Docker:
+   - `npm run docker:up`
+4. Run Prisma generate and migrations:
+   - `npm run prisma:generate`
+   - `npm run prisma:migrate -- --name init`
+5. If you prefer running app services on host instead of Docker, start them in separate terminals:
+   - API: `npm run dev:api`
+   - Realtime: `npm run dev:realtime`
+   - Web: `npm run dev:web`
+   - Worker (optional now): `npm run dev:worker`
+6. Open web app and create account:
+   - `http://localhost:3003`
+
+## Local Docker commands
+
+- Start full stack (Postgres + Redis + web + api + realtime + worker):
+  - `npm run docker:up`
+- Install/update container dependencies only:
+  - `npm run docker:deps`
+- Run Prisma schema sync against Docker Postgres:
+  - `npm run docker:migrate`
+- Start only infrastructure (Postgres + Redis):
+  - `npm run docker:up:infra`
+- Start only app services (expects infra running):
+  - `npm run docker:up:app`
+- Stream all container logs:
+  - `npm run docker:logs`
+- Stream infra logs only:
+  - `npm run docker:logs:infra`
+- Stream app logs only:
+  - `npm run docker:logs:app`
+- Stop containers:
+  - `npm run docker:down`
+- Stop and remove volumes (full local reset):
+  - `npm run docker:down:volumes`
+
+### Port conflicts
+
+- Web container host port defaults to `3003` to avoid common local Next.js conflicts on `3000`.
+- If `3003` is also in use, set another host port for web:
+  - `WEB_PORT=3010 npm run docker:up`
+- Then open:
+  - `http://localhost:3010`
+- Backend API host port is configurable via `API_PORT` (default `3002`).
+- Docker startup runs Prisma schema sync automatically before app services start.
+
+## Verification
+
+- Type checks pass across all workspaces:
+  - `npm run typecheck`
+
+## Codex skills workflow
+
+- Use the repo-local guide: [docs/CODEX_SKILLS.md](/Users/nursultanakhmetzhanov/Documents/personal_projects/my-miro/docs/CODEX_SKILLS.md)
+- Recommended sequence for feature work:
+  - `$plan` -> `$build` -> `$tests` -> `$review` -> `$docs`
