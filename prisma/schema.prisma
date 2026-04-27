@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum BoardRole {
+  OWNER
+  EDITOR
+  COMMENTER
+  VIEWER
+}
+
+model User {
+  id           String            @id @default(cuid())
+  email        String            @unique
+  displayName  String?
+  passwordHash String?
+  role         UserRole          @default(USER)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  workspaces   Workspace[]       @relation("WorkspaceOwner")
+  memberships  WorkspaceMember[]
+  boardRoles   BoardMember[]
+  boards       Board[]           @relation("BoardCreator")
+  versions     BoardVersion[]
+  assets       BoardAsset[]
+}
+
+model Workspace {
+  id         String            @id @default(cuid())
+  name       String
+  ownerId    String
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  owner      User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members    WorkspaceMember[]
+  boards     Board[]
+}
+
+model WorkspaceMember {
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+}
+
+model Board {
+  id           String        @id @default(cuid())
+  workspaceId  String
+  title        String
+  createdById  String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation("BoardCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  members      BoardMember[]
+  assets       BoardAsset[]
+  versions     BoardVersion[]
+}
+
+model BoardMember {
+  boardId String
+  userId  String
+  role    BoardRole @default(VIEWER)
+  board   Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([boardId, userId])
+}
+
+model BoardAsset {
+  id          String   @id @default(cuid())
+  boardId     String
+  storagePath String
+  mime        String
+  size        Int
+  uploadedById String
+  createdAt   DateTime @default(now())
+  board       Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  uploadedBy  User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+}
+
+model BoardVersion {
+  id          String   @id @default(cuid())
+  boardId     String
+  versionNo   Int
+  snapshotRef String
+  createdById String
+  createdAt   DateTime @default(now())
+  board       Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, versionNo])
+}
