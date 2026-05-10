@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import type { AuthSession, BoardDto, WorkspaceDto } from "@my-miro/contracts";
+import type { AuthSession, BoardDocument, BoardDto, WorkspaceDto } from "@my-miro/contracts";
 import { AUTH_COOKIE_NAME } from "./auth-cookie";
 
 const apiBase = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
@@ -113,4 +113,38 @@ export async function createBoard(workspaceId: string, title: string, token?: st
   }
 
   return parseJson<BoardDto>(response);
+}
+
+export async function getBoard(boardId: string, token?: string): Promise<BoardDto | null> {
+  const response = await fetch(`${apiBase}/boards/${boardId}`, {
+    headers: await authHeader(token),
+    cache: "no-store"
+  });
+
+  if (!response.ok) return null;
+  return parseJson<BoardDto>(response);
+}
+
+export async function getBoardState(boardId: string, token?: string): Promise<BoardDocument | null> {
+  const response = await fetch(`${apiBase}/boards/${boardId}/state`, {
+    headers: await authHeader(token),
+    cache: "no-store"
+  });
+
+  if (!response.ok) return null;
+  return parseJson<BoardDocument>(response);
+}
+
+export async function saveBoardState(boardId: string, data: BoardDocument, token?: string): Promise<BoardDocument> {
+  const response = await fetch(`${apiBase}/boards/${boardId}/state`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", ...(await authHeader(token)) },
+    body: JSON.stringify(data)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to save board state: ${response.status}`);
+  }
+
+  return parseJson<BoardDocument>(response);
 }
